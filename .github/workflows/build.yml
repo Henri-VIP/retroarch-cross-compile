@@ -1,0 +1,32 @@
+name: Build RetroArch + mGBA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: sudo apt update && sudo apt install -y gcc-arm-linux-gnueabihf autoconf automake libtool pkg-config build-essential
+      - run: |
+          git clone https://github.com/libretro/RetroArch.git
+          cd RetroArch
+          git checkout v1.10.3
+          git submodule update --init --recursive
+          ./autogen.sh
+          mkdir build && cd build
+          ../configure --host=arm-linux-gnueabihf --disable-shared --enable-static --enable-fbdev
+          make -j$(nproc)
+          strip retroarch
+      - run: |
+          git clone https://github.com/libretro/mgba.git
+          cd mgba
+          make CROSS_COMPILE=arm-linux-gnueabihf- platform=unix-armv7-hardfloat-neon STATIC=1 -j$(nproc)
+          strip mgba_libretro.so
+      - uses: actions/upload-artifact@v3
+        with:
+          name: pw5-retro-mgba
+          path: |
+            RetroArch/build/retroarch
+            mgba/mgba_libretro.so
