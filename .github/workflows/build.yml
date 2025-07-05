@@ -7,26 +7,71 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - run: sudo apt update && sudo apt install -y gcc-arm-linux-gnueabihf autoconf automake libtool pkg-config build-essential
-      - run: |
-          git clone https://github.com/libretro/RetroArch.git
-          cd RetroArch
-          git checkout v1.10.3
-          git submodule update --init --recursive
-          ./autogen.sh
+      # 1) Checkout your fork (not used for RetroArch source, but good hygiene)
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      # 2) Install build tools and cross-toolchain
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            build-essential autoconf automake libtool pkg-config \
+            curl gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf binutils
+
+      # 3) Grab the RetroArch 1.9.0 release tarball (config already bundled)
+      - name: Extract RetroArch v1.9.0
+        run: |
+          curl -L https://github.com/libretro/RetroArch/archive/refs/tags/v1.9.0.tar.gz \
+            | tar xz
+          mv RetroArch-1.9.0 retroarch-src
+
+      # 4) Configure & compile RetroArch
+      - name: Build RetroArch
+        run: |
+          cd retroarch-src
           mkdir build && cd build
-          ../configure --host=arm-linux-gnueabihf --disable-shared --enable-static --enable-fbdev
+          ../configure \
+            --host=arm-linux-gnueabihf \
+            --disable-shared \
+            --enable-static \
+            --enable-fbdev \
+            --disable-sdl \
+            --disable-x \
+            --disable-wayland \
+            --disable-opengl \
+            --disable-pulse \
+            --disable-alsa \
+            --disable-udev \
+            --disable-usb \
+            --disable-dynamic
           make -j$(nproc)
           strip retroarch
-      - run: |
+          mv retroarch $GITHUB_WORKSPACE/retroarch-armhf
+
+      # 5) Clone & build the mGBA libretro core
+      - name: Build mGBA core
+        run: |
           git clone https://github.com/libretro/mgba.git
           cd mgba
-          make CROSS_COMPILE=arm-linux-gnueabihf- platform=unix-armv7-hardfloat-neon STATIC=1 -j$(nproc)
+          make \
+            CROSS_COMPILE=arm-linux-gnueabihf- \
+            platform=unix-armv7-hardfloat-neon \
+            STATIC=1 \
+            -j$(nproc)
           strip mgba_libretro.so
-      - uses: actions/upload-artifact@v3
+          mv mgba_libretro.so $GITHUB_WORKSPACE/mgba-libretro.so
+
+      # 6) Upload RetroArch binary
+      - name: Upload RetroArch
+        uses: actions/upload-artifact@v4
         with:
-          name: pw5-retro-mgba
-          path: |
-            RetroArch/build/retroarch
-            mgba/mgba_libretro.so
+          name: retroarch-armhf
+          path: retroarch-armhf
+
+      # 7) Upload mGBA core
+      - name: Upload mGBA core
+        uses: actions/upload-artifact@v4
+        with:
+          name: mgba-libretro
+          path: mgba-libretro.so
