@@ -1,4 +1,4 @@
-name: Build RetroArch + mGBA
+name: Build RetroArch + mGBA v3
 
 on:
   workflow_dispatch:
