@@ -6,32 +6,28 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      # 1) Checkout your fork (not used for RetroArch source, but good hygiene)
-      - name: Checkout repo
+      - name: Checkout this repo
         uses: actions/checkout@v3
 
-      # 2) Install build tools and cross-toolchain
       - name: Install dependencies
         run: |
           sudo apt update
           sudo apt install -y \
-            build-essential autoconf automake libtool pkg-config \
-            curl gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf binutils
+            autoconf automake libtool pkg-config build-essential \
+            gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf binutils
 
-      # 3) Grab the RetroArch 1.9.0 release tarball (config already bundled)
-      - name: Extract RetroArch v1.9.0
+      - name: Build RetroArch v1.9.0
         run: |
-          curl -L https://github.com/libretro/RetroArch/archive/refs/tags/v1.9.0.tar.gz \
-            | tar xz
-          mv RetroArch-1.9.0 retroarch-src
+          git clone https://github.com/libretro/RetroArch.git
+          cd RetroArch
+          git checkout v1.9.0
+          git submodule update --init --recursive
+          ./autogen.sh
 
-      # 4) Configure & compile RetroArch
-      - name: Build RetroArch
-        run: |
-          cd retroarch-src
-          mkdir build && cd build
-          ../configure \
+          # run configure from the repo root so qb/ is found
+          ./configure \
             --host=arm-linux-gnueabihf \
             --disable-shared \
             --enable-static \
@@ -45,11 +41,11 @@ jobs:
             --disable-udev \
             --disable-usb \
             --disable-dynamic
+
           make -j$(nproc)
           strip retroarch
           mv retroarch $GITHUB_WORKSPACE/retroarch-armhf
 
-      # 5) Clone & build the mGBA libretro core
       - name: Build mGBA core
         run: |
           git clone https://github.com/libretro/mgba.git
@@ -62,14 +58,12 @@ jobs:
           strip mgba_libretro.so
           mv mgba_libretro.so $GITHUB_WORKSPACE/mgba-libretro.so
 
-      # 6) Upload RetroArch binary
-      - name: Upload RetroArch
+      - name: Upload RetroArch binary
         uses: actions/upload-artifact@v4
         with:
           name: retroarch-armhf
           path: retroarch-armhf
 
-      # 7) Upload mGBA core
       - name: Upload mGBA core
         uses: actions/upload-artifact@v4
         with:
