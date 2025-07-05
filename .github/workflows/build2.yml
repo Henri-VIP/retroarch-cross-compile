@@ -1,0 +1,71 @@
+name: Build RetroArch + mGBA v2
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1) Checkout this repo (so you can add your own config later if needed)
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      # 2) Install cross-toolchain and build tools
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            autoconf automake libtool pkg-config build-essential \
+            gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+
+      # 3) Build RetroArch v1.9.0
+      - name: Build RetroArch v1.9.0
+        run: |
+          git clone https://github.com/libretro/RetroArch.git
+          cd RetroArch
+          git checkout v1.9.0
+          git submodule update --init --recursive
+          ./autogen.sh
+          mkdir build && cd build
+          ../configure \
+            --host=arm-linux-gnueabihf \
+            --disable-shared \
+            --enable-static \
+            --enable-fbdev \
+            --disable-sdl \
+            --disable-opengl \
+            --disable-x \
+            --disable-pulse \
+            --disable-alsa \
+            --disable-udev \
+            --disable-usb \
+            --disable-dynamic
+          make -j$(nproc)
+          strip retroarch
+
+      # 4) Build the mGBA core
+      - name: Build mGBA core
+        run: |
+          git clone https://github.com/libretro/mgba.git
+          cd mgba
+          make CROSS_COMPILE=arm-linux-gnueabihf- \
+               platform=unix-armv7-hardfloat-neon \
+               STATIC=1 \
+               -j$(nproc)
+          strip mgba_libretro.so
+
+      # 5) Upload RetroArch binary
+      - name: Upload RetroArch binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: retroarch-armhf
+          path: RetroArch/build/retroarch
+
+      # 6) Upload mGBA core
+      - name: Upload mGBA core
+        uses: actions/upload-artifact@v4
+        with:
+          name: mgba-libretro
+          path: mgba/mgba_libretro.so
